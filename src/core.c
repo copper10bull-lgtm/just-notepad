@@ -32,73 +32,74 @@ static void FillRichEditFromRawData(TabInfo* tab, int encoding) {
 
         if (encoding == 1251 || encoding == 1252) {
             int wlen = MultiByteToWideChar(encoding, 0, (LPCCH)(tab->rawData + bomOff), tab->rawSize - bomOff, NULL, 0);
-            if (wlen > 0) {
-                WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
-                if (wbuf) {
-                    int conv = MultiByteToWideChar(encoding, 0, (LPCCH)(tab->rawData + bomOff), tab->rawSize - bomOff, wbuf, wlen);
-                    if (conv > 0) {
-                        wbuf[conv] = L'\0';
-                        SetWindowText(tab->hRichEdit, wbuf);
-                    } else {
-                        SetWindowText(tab->hRichEdit, L"");
-                    }
-                    free(wbuf);
-                } else {
-                    SetWindowText(tab->hRichEdit, L"");
-                }
+            if (wlen <= 0) {
+                // Не удалось определить длину или произошла ошибка
+                SetWindowText(tab->hRichEdit, L"");
+                return;
+            }
+            WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
+            if (!wbuf) {
+                SetWindowText(tab->hRichEdit, L"");
+                return;
+            }
+            int conv = MultiByteToWideChar(encoding, 0, (LPCCH)(tab->rawData + bomOff), tab->rawSize - bomOff, wbuf, wlen);
+            if (conv > 0) {
+                wbuf[conv] = L'\0';
+                SetWindowText(tab->hRichEdit, wbuf);
             } else {
                 SetWindowText(tab->hRichEdit, L"");
             }
+            free(wbuf);
         } else if (encoding == 1200) {
             int wlen = (tab->rawSize - bomOff) / 2;
-            if (wlen > 0) {
-                WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
-                if (wbuf) {
-                    memcpy(wbuf, tab->rawData + bomOff, wlen * sizeof(WCHAR));
-                    wbuf[wlen] = L'\0';
-                    SetWindowText(tab->hRichEdit, wbuf);
-                    free(wbuf);
-                } else {
-                    SetWindowText(tab->hRichEdit, L"");
-                }
-            } else {
+            if (wlen <= 0) {
                 SetWindowText(tab->hRichEdit, L"");
+                return;
             }
+            WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
+            if (!wbuf) {
+                SetWindowText(tab->hRichEdit, L"");
+                return;
+            }
+            memcpy(wbuf, tab->rawData + bomOff, wlen * sizeof(WCHAR));
+            wbuf[wlen] = L'\0';
+            SetWindowText(tab->hRichEdit, wbuf);
+            free(wbuf);
         } else if (encoding == 1201) {
             int wlen = (tab->rawSize - bomOff) / 2;
-            if (wlen > 0) {
-                WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
-                if (wbuf) {
-                    BYTE* src = tab->rawData + bomOff;
-                    for (int i = 0; i < wlen; i++) wbuf[i] = (src[i*2] << 8) | src[i*2 + 1];
-                    wbuf[wlen] = L'\0';
-                    SetWindowText(tab->hRichEdit, wbuf);
-                    free(wbuf);
-                } else {
-                    SetWindowText(tab->hRichEdit, L"");
-                }
-            } else {
+            if (wlen <= 0) {
                 SetWindowText(tab->hRichEdit, L"");
+                return;
             }
+            WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
+            if (!wbuf) {
+                SetWindowText(tab->hRichEdit, L"");
+                return;
+            }
+            BYTE* src = tab->rawData + bomOff;
+            for (int i = 0; i < wlen; i++) wbuf[i] = (src[i*2] << 8) | src[i*2 + 1];
+            wbuf[wlen] = L'\0';
+            SetWindowText(tab->hRichEdit, wbuf);
+            free(wbuf);
         } else {
             int wlen = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)(tab->rawData + bomOff), tab->rawSize - bomOff, NULL, 0);
-            if (wlen > 0) {
-                WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
-                if (wbuf) {
-                    int conv = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)(tab->rawData + bomOff), tab->rawSize - bomOff, wbuf, wlen);
-                    if (conv > 0) {
-                        wbuf[conv] = L'\0';
-                        SetWindowText(tab->hRichEdit, wbuf);
-                    } else {
-                        SetWindowText(tab->hRichEdit, L"");
-                    }
-                    free(wbuf);
-                } else {
-                    SetWindowText(tab->hRichEdit, L"");
-                }
+            if (wlen <= 0) {
+                SetWindowText(tab->hRichEdit, L"");
+                return;
+            }
+            WCHAR* wbuf = malloc((size_t)(wlen + 1) * sizeof(WCHAR));
+            if (!wbuf) {
+                SetWindowText(tab->hRichEdit, L"");
+                return;
+            }
+            int conv = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)(tab->rawData + bomOff), tab->rawSize - bomOff, wbuf, wlen);
+            if (conv > 0) {
+                wbuf[conv] = L'\0';
+                SetWindowText(tab->hRichEdit, wbuf);
             } else {
                 SetWindowText(tab->hRichEdit, L"");
             }
+            free(wbuf);
         }
     } else {
         DWORD maxHexDump = 100 * 1024 * 1024, dumpSize = min(tab->rawSize, maxHexDump);
@@ -181,8 +182,8 @@ void RemoveTab(AppState* state, int index) {
     RemoveWindowSubclass(tab->hLineNumbers, GutterSubclassProc, SUBCLASS_GUTTER);
     DestroyWindow(tab->hRichEdit); DestroyWindow(tab->hSeparator);
     DestroyWindow(tab->hLineNumbers); DestroyWindow(tab->hContainer);
-    free(tab->rawData);
-    tab->rawData = NULL;
+    free(tab->rawData);           // <-- исправлено: освобождаем память
+    tab->rawData = NULL;          // обнуляем указатель
     TabCtrl_DeleteItem(state->hTab, index);
     if (index < state->tabCount - 1)
         memmove(&state->tabs[index], &state->tabs[index + 1], (state->tabCount - index - 1) * sizeof(TabInfo));
@@ -464,7 +465,7 @@ void ShowFileHash(HWND hwnd, const BYTE* data, DWORD size, ALG_ID algId) {
     int hexLen = hashLen * 2 + 1; WCHAR* szHash = malloc(hexLen * sizeof(WCHAR));
     if (szHash) {
         WCHAR* ptr = szHash;
-        for (DWORD i = 0; i < hashLen; i++) { ptr += _snwprintf(ptr, 3, L"%02X", hash[i]); }
+        for (DWORD i = 0; i < hashLen; i++) { _snwprintf(ptr, 3, L"%02X", hash[i]); ptr += 2; }
         *ptr = L'\0'; MessageBox(hwnd, szHash, GetStr(STR_HASH_TITLE), MB_OK | MB_ICONINFORMATION); free(szHash);
     }
     free(hash);
