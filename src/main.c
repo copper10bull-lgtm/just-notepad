@@ -43,7 +43,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             state->lf.lfWeight = FW_NORMAL;
             state->lf.lfCharSet = DEFAULT_CHARSET;
             state->lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
-            wcscpy(state->lf.lfFaceName, L"Consolas");
+            StringCchCopy(state->lf.lfFaceName, LF_FACESIZE, L"Consolas");  // безопасное копирование
             state->hFont = CreateFontIndirect(&state->lf);
             state->gutterWidth = 60;
 
@@ -53,6 +53,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             state->hStatus = CreateWindowEx(0, STATUSCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0,0,0,0, hwnd, (HMENU)IDC_STATUS, GetModuleHandle(NULL), NULL);
             state->hTab = CreateWindowEx(0, WC_TABCONTROL, NULL, WS_CHILD | WS_VISIBLE | TCS_FOCUSNEVER | TCS_FIXEDWIDTH, 0,0,0,0, hwnd, (HMENU)IDC_TAB, GetModuleHandle(NULL), NULL);
+
+            if (!state->hStatus || !state->hTab) {
+                MessageBox(hwnd, L"Failed to create child windows.", L"Fatal Error", MB_ICONERROR);
+                return -1;
+            }
 
             SetMenu(hwnd, BuildMenu(state));
             AddTab(state, GetStr(STR_UNTITLED), NULL);
@@ -173,7 +178,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             for (int i = 0; i < state->tabCount; i++) {
                 if (state->tabs[i].modified) {
                     SwitchToTab(state, i);
-                    WCHAR msgClose[512]; _snwprintf(msgClose, 511, GetStr(STR_EXIT_SAVE_PROMPT), state->tabs[i].title);
+                    WCHAR msgClose[512]; StringCchPrintf(msgClose, 512, GetStr(STR_EXIT_SAVE_PROMPT), state->tabs[i].title);
                     int ret = MessageBox(hwnd, msgClose, GetStr(STR_TITLE), MB_YESNOCANCEL | MB_ICONQUESTION);
                     if (ret == IDCANCEL) return 0;
                     if (ret == IDYES) { if (!SaveTab(state, i, FALSE)) return 0; }
@@ -191,6 +196,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     DestroyWindow(state->tabs[i].hRichEdit); DestroyWindow(state->tabs[i].hSeparator);
                     DestroyWindow(state->tabs[i].hLineNumbers); DestroyWindow(state->tabs[i].hContainer);
                     free(state->tabs[i].rawData);
+                    state->tabs[i].rawData = NULL;
                 }
                 free(state->tabs);
                 if (state->hFont) DeleteObject(state->hFont);
@@ -211,8 +217,28 @@ static void ProcessCommandLine(AppState* state, LPWSTR lpCmdLine) {
     while (*lpCmdLine == L' ' || *lpCmdLine == L'\t') lpCmdLine++;
     if (*lpCmdLine == L'\0') return;
     WCHAR path[MAX_PATH] = L"";
-    if (lpCmdLine[0] == L'"') { lpCmdLine++; const WCHAR* end = wcschr(lpCmdLine, L'"'); if (end) { wcsncpy(path, lpCmdLine, end - lpCmdLine); path[end - lpCmdLine] = L'\0'; } else wcscpy(path, lpCmdLine); }
-    else { const WCHAR* end = wcspbrk(lpCmdLine, L" \t"); if (end) { wcsncpy(path, lpCmdLine, end - lpCmdLine); path[end - lpCmdLine] = L'\0'; } else wcscpy(path, lpCmdLine); }
+    if (lpCmdLine[0] == L'"') {
+        lpCmdLine++;
+        const WCHAR* end = wcschr(lpCmdLine, L'"');
+        if (end) {
+            int len = (int)(end - lpCmdLine);
+            if (len >= MAX_PATH) len = MAX_PATH - 1;
+            memcpy(path, lpCmdLine, len * sizeof(WCHAR));
+            path[len] = L'\0';
+        } else {
+            StringCchCopy(path, MAX_PATH, lpCmdLine);
+        }
+    } else {
+        const WCHAR* end = wcspbrk(lpCmdLine, L" \t");
+        if (end) {
+            int len = (int)(end - lpCmdLine);
+            if (len >= MAX_PATH) len = MAX_PATH - 1;
+            memcpy(path, lpCmdLine, len * sizeof(WCHAR));
+            path[len] = L'\0';
+        } else {
+            StringCchCopy(path, MAX_PATH, lpCmdLine);
+        }
+    }
     if (path[0] == L'\0') return;
     TabInfo* cur = &state->tabs[state->currentTab];
     if (cur->modified || cur->filepath[0] != L'\0') { AddTab(state, GetStr(STR_LOADING), NULL); SwitchToTab(state, state->tabCount - 1); }
@@ -228,9 +254,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         GetModuleFileName(NULL, path, MAX_PATH);
         WCHAR* p = wcsrchr(path, L'\\');
         if (p) *(p+1) = L'\0';
-        wcscat(path, L"settings.ini");
+        StringCchCat(path, MAX_PATH, L"settings.ini");
         WCHAR buf[16];
-        _snwprintf(buf, 16, L"%d", currentLang);
+        StringCchPrintf(buf, 16, L"%d", currentLang);
         WritePrivateProfileString(L"Settings", L"Language", buf, path);
     }
 
